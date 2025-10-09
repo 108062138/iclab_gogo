@@ -1,5 +1,6 @@
 import numpy as np
 from utils.check import *
+
 def macro_block_partition(Y_tensor):
     H, W = Y_tensor.shape
     FRAME_H = 32
@@ -10,6 +11,7 @@ def macro_block_partition(Y_tensor):
     print(frames.shape, reconstruct.shape)
     diff_two_tensor(Y_tensor, reconstruct)
     return frames, reconstruct
+
 def consume_a_frame(frame, op_mode, QP):
     assert(frame.shape==(32,32) and len(op_mode)==4 and QP>=0 and QP<=32)
     H, W = frame.shape
@@ -33,15 +35,20 @@ def consume_a_frame(frame, op_mode, QP):
             en_bitmap = get_en_bitmap(blk_idx=blk_idx,step=step)
             L, T = get_T_L(blk_idx=blk_idx, step=step, predict_width=predict_width, en_bitmap=en_bitmap, regs=regs)
             dc_predict, h_predict, v_predict = enumerate_all_prediction(L=L, T=T, predict_width=predict_width, en_bitmap=en_bitmap)
+            
             cut_out_ans = get_ans_block(blk_idx=blk_idx, step=step, regs=regs, predict_width=predict_width)
+
+            print('haha: ', dc_predict.shape)
+            print('123456: ', cut_out_ans.shape)
+
             SAD_res, pick = determine_predict_blk(dc_predict=dc_predict, h_predict=h_predict,v_predict=v_predict, en_bitmap=en_bitmap, cut_out_ans=cut_out_ans)
             if pick==0: predicted = dc_predict
             if pick==1: predicted = h_predict
             if pick==2: predicted = v_predict
             X = residual_computation(input=cut_out_ans, predicted=predicted)
             W = integer_transform(X=X)
-            Z = quantization(W=W)
-            W_bar = de_quantization(Z=Z)
+            Z = quantization(W=W, QP=QP)
+            W_bar = de_quantization(Z=Z, QP=QP)
             X_bar = reverse_integer_transform(W_bar=W_bar)
             reconstructed = X_bar +  predicted
             # update regs accordingly
@@ -55,6 +62,7 @@ def reverse_integer_transform(W_bar):
     Y = integer_transform(X=W_bar) # chekcing~~
     X_bar = Y >> 6
     return X_bar
+
 def integer_transform(X):
     Cf = np.array([
     [ 1,  1,  1,  1],
@@ -79,16 +87,19 @@ def quantization(W,QP):
     q_bits = gen_q_bit(QP=QP)
     f = gen_offset(QP=QP)
     MF = gen_MF(QP=QP)
+    if isinstance(MF, np.ndarray):
+        MF = MF.astype(np.int32)
     h, w = W.shape
     GRID_H = 4
     GRID_W = 4
     grids = W.reshape(h//GRID_H, GRID_H, w//GRID_W, GRID_W).transpose(0,2,1,3)
     for i in range(0, grids.shape[0]):
         for j in range(0, grids.shape[1]):
-            grids[i,j] = (grids[i,j] * MF + f) >> q_bits
-            # for a in range(4):
-            #     for b in range(4):
-            #         grids[i,j,a,b] = (grids[i,j,a,b]*MF[a,b] + f) >> q_bits
+            W_sub = grids[i, j]
+            W_sign = np.sign(W_sub)
+            abs_W = np.abs(W_sub)
+            abs_Z = (abs_W * MF + f) >> q_bits
+            grids[i, j] = abs_Z * W_sign
     Z = grids.transpose(0, 2, 1, 3).reshape(h, w)
     return Z
 
@@ -199,10 +210,9 @@ def enumerate_all_prediction(L, T, predict_width, en_bitmap):
     dc_predict = np.zeros((predict_width, predict_width))
     h_predict = np.zeros((predict_width, predict_width))
     v_predict = np.zeros((predict_width, predict_width))
-    
     # maintain dc mode
     if en_bitmap==[1,0,0]:
-        dc_val = np.u_int8(128)
+        dc_val = 128
     elif en_bitmap==[1,1,0]: # can do h, so use L
         dc_val = np.u_int8(np.sum(L) >> 2)
     elif en_bitmap==[1,0,1]: # can do v, so use T
@@ -222,6 +232,7 @@ def enumerate_all_prediction(L, T, predict_width, en_bitmap):
         for i in range(predict_width):
             for j in range(predict_width):
                 h_predict[i,j] = T[i]
+    print('omg: ', dc_predict.shape, h_predict.shape, v_predict.shape)
     return dc_predict, h_predict, v_predict
 
 def get_en_bitmap(blk_idx, step):
@@ -252,13 +263,14 @@ def get_en_bitmap(blk_idx, step):
     if 'h' in prediction_set_en: en_bitmap[1] = 1
     if 'v' in prediction_set_en: en_bitmap[2] = 1
     return en_bitmap
+
 def get_ans_block(blk_idx, step, regs, predict_width):
     at_row, at_col = decode_row_col_by_blk_idx_and_step(blk_idx=blk_idx, step=step)
     cut_out_ans = np.zeros((predict_width, predict_width))
     for i in range(predict_width):
         for j in range(predict_width):
             cut_out_ans[i, j] = regs[i+at_row, j+at_col]
-    return get_ans_block
+    return cut_out_ans
 
 def determine_predict_blk(dc_predict, h_predict, v_predict, en_bitmap, cut_out_ans):
     SAD_for_dc = SAD(A=dc_predict,B=cut_out_ans)
