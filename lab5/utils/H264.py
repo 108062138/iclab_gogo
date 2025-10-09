@@ -18,6 +18,7 @@ def consume_a_frame(frame, op_mode, QP):
     PREDICT_BLOCK_H = 16
     PREDICT_BLOCK_W = 16
     blocks = frame.reshape(H//PREDICT_BLOCK_H, PREDICT_BLOCK_H, W//PREDICT_BLOCK_W, PREDICT_BLOCK_W).transpose(0, 2, 1, 3)
+    print('123456',blocks.shape)
     reconstruct = blocks.transpose(0, 2, 1, 3).reshape(H, W)
     print(blocks.shape, reconstruct.shape)
     diff_two_tensor(frame, reconstruct)
@@ -30,17 +31,16 @@ def consume_a_frame(frame, op_mode, QP):
         max_depth = 1 if mode==0 else 16
         predict_width = 16 if max_depth==1 else 4
         print('at blk', (blk_idx//len_j, blk_idx%len_j), 'we have op:', mode)
+        for i in range(16):
+            for j in range(16):
+                print(f"{blocks[blk_idx//len_j, blk_idx%len_j, i, j]:3d}", end=' ')
+            print()
         # according to blk_idx and currenct step to decide prediction set
         for step in range(max_depth):
             en_bitmap = get_en_bitmap(blk_idx=blk_idx,step=step)
             L, T = get_T_L(blk_idx=blk_idx, step=step, predict_width=predict_width, en_bitmap=en_bitmap, regs=regs)
             dc_predict, h_predict, v_predict = enumerate_all_prediction(L=L, T=T, predict_width=predict_width, en_bitmap=en_bitmap)
-            
             cut_out_ans = get_ans_block(blk_idx=blk_idx, step=step, regs=regs, predict_width=predict_width)
-
-            print('haha: ', dc_predict.shape)
-            print('123456: ', cut_out_ans.shape)
-
             SAD_res, pick = determine_predict_blk(dc_predict=dc_predict, h_predict=h_predict,v_predict=v_predict, en_bitmap=en_bitmap, cut_out_ans=cut_out_ans)
             if pick==0: predicted = dc_predict
             if pick==1: predicted = h_predict
@@ -48,6 +48,7 @@ def consume_a_frame(frame, op_mode, QP):
             X = residual_computation(input=cut_out_ans, predicted=predicted)
             W = integer_transform(X=X)
             Z = quantization(W=W, QP=QP)
+            # lower half <======>
             W_bar = de_quantization(Z=Z, QP=QP)
             X_bar = reverse_integer_transform(W_bar=W_bar)
             reconstructed = X_bar +  predicted
@@ -55,7 +56,7 @@ def consume_a_frame(frame, op_mode, QP):
             at_row, at_col = decode_row_col_by_blk_idx_and_step(blk_idx=blk_idx, step=step)
             for i in range(predict_width):
                 for j in range(predict_width):
-                    regs[i+at_row,j+at_col] = reconstructed[i,j] 
+                    regs[i+at_row,j+at_col] = reconstructed[i,j]
     return blocks, reconstruct
 
 def reverse_integer_transform(W_bar):
@@ -70,7 +71,6 @@ def integer_transform(X):
     [ 1, -1, -1,  1],
     [ 1, -1,  1, -1],
     ], dtype=np.int32)
-    print(X.dtype)
     X = X.astype(np.int32, copy=False)
     # cut block into several 4x4 grid
     h, w = X.shape
@@ -102,7 +102,7 @@ def quantization(W,QP):
     return Z
 
 def de_quantization(Z, QP):
-    deq_bit = gen_deq_bit(QP)
+    deq_bit = gen_deq_bit(QP=QP)
     scale_factor = gen_scale_factor(QP=QP)
     h, w = Z.shape
     GRID_H = 4
@@ -134,11 +134,11 @@ def gen_scale_factor(QP):
     rem = QP % 6
     scale_factor_table = np.array([
     [10,  16,  13],
-    [11,  18, 14],
-    [13, 20, 16],
-    [14, 23,  18],
-    [16, 25,  20],
-    [18, 29,  23],
+    [11,  18,  14],
+    [13,  20,  16],
+    [14,  23,  18],
+    [16,  25,  20],
+    [18,  29,  23],
     ], dtype=np.int32)
 
     a, b, c = scale_factor_table[rem]
@@ -155,11 +155,11 @@ def gen_MF(QP):
     rem = QP%6
     MF_table = np.array([
     [13107,  5243,  8066],
-    [11916,  4660, 7490],
-    [10082, 4194, 6554],
-    [9362, 3647,  5825],
-    [8192, 3355,  5243],
-    [7282, 2893,  4559],
+    [11916,  4660,  7490],
+    [10082,  4194,  6554],
+    [ 9362,  3647,  5825],
+    [ 8192,  3355,  5243],
+    [ 7282,  2893,  4559],
     ], dtype=np.int32)
     a, b, c  = MF_table[rem]
     MF = np.array([
@@ -188,15 +188,11 @@ def get_T_L(blk_idx, step, predict_width, en_bitmap, regs):
     # maintain T for v
     if en_bitmap[2]:
         for i in range(predict_width):
-            print(i)
-            T[i] = regs[at_row+i][at_col]
+            T[i] = regs[at_row+i-1][at_col]
     # maintain L for h
-    print('see~~', predict_width)
-    print(regs.shape)
     if en_bitmap[1]:
         for j in range(predict_width):
-
-            L[j] = regs[at_row][at_col+j]
+            L[j] = regs[at_row][at_col+j-1]
     return T, L
 
 def decode_row_col_by_blk_idx_and_step(blk_idx, step):
@@ -233,7 +229,7 @@ def enumerate_all_prediction(L, T, predict_width, en_bitmap):
     if en_bitmap[2]:
         for i in range(predict_width):
             for j in range(predict_width):
-                v_predict[i,j] = T[i]
+                v_predict[i,j] = T[j]
     return dc_predict, h_predict, v_predict
 
 def get_en_bitmap(blk_idx, step):
@@ -258,7 +254,7 @@ def get_en_bitmap(blk_idx, step):
             prediction_set_en = {'dc','h','v'}
     else:
         prediction_set_en = {'dc','h','v'}
-    # print(blk_prediction_set_en)
+    
     en_bitmap = [0,0,0]
     if 'dc' in prediction_set_en: en_bitmap[0] = 1
     if 'h' in prediction_set_en: en_bitmap[1] = 1
