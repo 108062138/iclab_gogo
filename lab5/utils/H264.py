@@ -23,10 +23,10 @@ def consume_a_frame(frame, op_mode, QP):
     diff_two_tensor(frame, reconstruct)
 
     len_i, len_j, _, _ = blocks.shape
+    regs = reconstruct.copy()
     # iterate through each block
     for blk_idx in range(len_i*len_j):
         mode = op_mode[blk_idx]
-        regs = np.zeros(blocks[blk_idx//len_j, blk_idx%len_j].shape)
         max_depth = 1 if mode==0 else 16
         predict_width = 16 if max_depth==1 else 4
         print('at blk', (blk_idx//len_j, blk_idx%len_j), 'we have op:', mode)
@@ -87,8 +87,6 @@ def quantization(W,QP):
     q_bits = gen_q_bit(QP=QP)
     f = gen_offset(QP=QP)
     MF = gen_MF(QP=QP)
-    if isinstance(MF, np.ndarray):
-        MF = MF.astype(np.int32)
     h, w = W.shape
     GRID_H = 4
     GRID_W = 4
@@ -117,10 +115,10 @@ def de_quantization(Z, QP):
     return W_bar
 
 def gen_deq_bit(QP):
-    return np.floor(QP//6)
+    return (np.floor(QP//6)).astype(np.int32)
 
 def gen_q_bit(QP):
-    return 15 + np.floor(QP//6)
+    return (15 + np.floor(QP//6)).astype(np.int32)
 
 def gen_offset(QP):
     if QP>=0 and QP<=5:     return  10922
@@ -179,7 +177,7 @@ def residual_computation(input, predicted):
 def SAD(A, B):
     assert(A.shape==B.shape)
     diff = A - B
-    total = np.abs(diff).sum
+    total = np.abs(diff).sum()
     return total
 
 def get_T_L(blk_idx, step, predict_width, en_bitmap, regs):
@@ -189,11 +187,15 @@ def get_T_L(blk_idx, step, predict_width, en_bitmap, regs):
     at_row, at_col = decode_row_col_by_blk_idx_and_step(blk_idx=blk_idx, step=step)
     # maintain T for v
     if en_bitmap[2]:
-        for i in range(len(T)):
+        for i in range(predict_width):
+            print(i)
             T[i] = regs[at_row+i][at_col]
     # maintain L for h
+    print('see~~', predict_width)
+    print(regs.shape)
     if en_bitmap[1]:
-        for j in range(len(L)):
+        for j in range(predict_width):
+
             L[j] = regs[at_row][at_col+j]
     return T, L
 
@@ -214,11 +216,11 @@ def enumerate_all_prediction(L, T, predict_width, en_bitmap):
     if en_bitmap==[1,0,0]:
         dc_val = 128
     elif en_bitmap==[1,1,0]: # can do h, so use L
-        dc_val = np.u_int8(np.sum(L) >> 2)
+        dc_val = np.uint8(np.sum(L) >> 2)
     elif en_bitmap==[1,0,1]: # can do v, so use T
-        dc_val = np.u_int8(np.sum(T) >> 2)
+        dc_val = np.uint8(np.sum(T) >> 2)
     else:
-        dc_val = np.u_int8((np.sum(L+T)) >> 3)
+        dc_val = np.uint8((np.sum(L+T)) >> 3)
     for i in range(predict_width):
         for j in range(predict_width):
             dc_predict[i,j] = dc_val
@@ -231,8 +233,7 @@ def enumerate_all_prediction(L, T, predict_width, en_bitmap):
     if en_bitmap[2]:
         for i in range(predict_width):
             for j in range(predict_width):
-                h_predict[i,j] = T[i]
-    print('omg: ', dc_predict.shape, h_predict.shape, v_predict.shape)
+                v_predict[i,j] = T[i]
     return dc_predict, h_predict, v_predict
 
 def get_en_bitmap(blk_idx, step):
@@ -281,7 +282,7 @@ def determine_predict_blk(dc_predict, h_predict, v_predict, en_bitmap, cut_out_a
         SAD_res = SAD_for_dc
         pick = 0 # 0 for dc
     elif en_bitmap==[1,1,0]:
-        if SAD_for_dc>SAD_for_h:
+        if SAD_for_dc > SAD_for_h:
             SAD_res = SAD_for_h
             pick = 1
         else:
