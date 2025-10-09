@@ -38,25 +38,39 @@ def consume_a_frame(frame, op_mode, QP):
         # according to blk_idx and currenct step to decide prediction set
         for step in range(max_depth):
             en_bitmap = get_en_bitmap(blk_idx=blk_idx,step=step)
-            L, T = get_T_L(blk_idx=blk_idx, step=step, predict_width=predict_width, en_bitmap=en_bitmap, regs=regs)
+            T, L = get_T_L(blk_idx=blk_idx, step=step, predict_width=predict_width, en_bitmap=en_bitmap, regs=regs)
+            print("hahahah hahahha see L:", L, "T:", T, "en_bitmap:", en_bitmap)
             dc_predict, h_predict, v_predict = enumerate_all_prediction(L=L, T=T, predict_width=predict_width, en_bitmap=en_bitmap)
             cut_out_ans = get_ans_block(blk_idx=blk_idx, step=step, regs=regs, predict_width=predict_width)
             SAD_res, pick = determine_predict_blk(dc_predict=dc_predict, h_predict=h_predict,v_predict=v_predict, en_bitmap=en_bitmap, cut_out_ans=cut_out_ans)
             if pick==0: predicted = dc_predict
             if pick==1: predicted = h_predict
             if pick==2: predicted = v_predict
+            print("at step: ", step, "predict", predicted, "wit SAD:", SAD_res)
+            
             X = residual_computation(input=cut_out_ans, predicted=predicted)
+            print("residual:", X)
             W = integer_transform(X=X)
+            print("after int transform:", W)
             Z = quantization(W=W, QP=QP)
+            print("after quantization:", Z)
             # lower half <======>
             W_bar = de_quantization(Z=Z, QP=QP)
+            print("after de-quantization:", W_bar)
             X_bar = reverse_integer_transform(W_bar=W_bar)
-            reconstructed = X_bar +  predicted
+            print("after reverse int transform:", X_bar)
+            next_blk = X_bar +  predicted
+            print("next_blk:", next_blk)
             # update regs accordingly
             at_row, at_col = decode_row_col_by_blk_idx_and_step(blk_idx=blk_idx, step=step)
             for i in range(predict_width):
                 for j in range(predict_width):
-                    regs[i+at_row,j+at_col] = reconstructed[i,j]
+                    regs[i+at_row,j+at_col] = next_blk[i,j]
+            print("after updating regs, we have:")
+            for i in range(32):
+                for j in range(32):
+                    print(f"{regs[i,j]:3d}", end=' ')
+                print()
     return blocks, reconstruct
 
 def reverse_integer_transform(W_bar):
@@ -87,6 +101,7 @@ def quantization(W,QP):
     q_bits = gen_q_bit(QP=QP)
     f = gen_offset(QP=QP)
     MF = gen_MF(QP=QP)
+    print("MF:\n", MF)
     h, w = W.shape
     GRID_H = 4
     GRID_W = 4
@@ -177,6 +192,7 @@ def residual_computation(input, predicted):
 def SAD(A, B):
     assert(A.shape==B.shape)
     diff = A - B
+    print(diff)
     total = np.abs(diff).sum()
     return total
 
@@ -188,20 +204,20 @@ def get_T_L(blk_idx, step, predict_width, en_bitmap, regs):
     # maintain T for v
     if en_bitmap[2]:
         for i in range(predict_width):
-            T[i] = regs[at_row+i-1][at_col]
+            T[i] = regs[at_row-1][at_col+i]
     # maintain L for h
     if en_bitmap[1]:
         for j in range(predict_width):
-            L[j] = regs[at_row][at_col+j-1]
+            L[j] = regs[at_row+j][at_col-1]
     return T, L
 
 def decode_row_col_by_blk_idx_and_step(blk_idx, step):
     bigger_row = blk_idx // 2
     bigger_col = blk_idx % 2
-    smaller_row = step // 4
+    smaller_row = step // 4 
     smaller_col = step % 4
-    at_row = bigger_row * 16 + smaller_row
-    at_col = bigger_col * 16 + smaller_col
+    at_row = bigger_row * 16 + smaller_row * 4
+    at_col = bigger_col * 16 + smaller_col * 4
     return at_row, at_col
 
 def enumerate_all_prediction(L, T, predict_width, en_bitmap):
@@ -213,10 +229,13 @@ def enumerate_all_prediction(L, T, predict_width, en_bitmap):
         dc_val = 128
     elif en_bitmap==[1,1,0]: # can do h, so use L
         dc_val = np.uint8(np.sum(L) >> 2)
+        print("L:", L)
+        print("np.sum(L):", np.sum(L))
     elif en_bitmap==[1,0,1]: # can do v, so use T
         dc_val = np.uint8(np.sum(T) >> 2)
     else:
         dc_val = np.uint8((np.sum(L+T)) >> 3)
+    print("dc val:", dc_val, "en_bitmap:", en_bitmap)
     for i in range(predict_width):
         for j in range(predict_width):
             dc_predict[i,j] = dc_val
@@ -273,7 +292,20 @@ def determine_predict_blk(dc_predict, h_predict, v_predict, en_bitmap, cut_out_a
     SAD_for_dc = SAD(A=dc_predict,B=cut_out_ans)
     SAD_for_h = SAD(A=h_predict,B=cut_out_ans)
     SAD_for_v = SAD(A=v_predict,B=cut_out_ans)
-    
+    print("dc_predict")
+    print(dc_predict)
+    print("SAD for dc")
+    print(SAD_for_dc)
+
+    print("h_predict")
+    print(h_predict)
+    print("SAD for h")
+    print(SAD_for_h)
+    print("v_predict")
+    print(v_predict)
+    print("SAD for v")
+    print(SAD_for_v)
+
     if en_bitmap==[1,0,0]:
         SAD_res = SAD_for_dc
         pick = 0 # 0 for dc
