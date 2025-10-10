@@ -1,3 +1,5 @@
 lab5/output/
 lab5/utils/__pycache__/
 lab5/obj_dir/
+lab5/*.vcd
+lab5/rec.log
