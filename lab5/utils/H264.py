@@ -228,13 +228,22 @@ def enumerate_all_prediction(L, T, predict_width, en_bitmap):
     if en_bitmap==[1,0,0]:
         dc_val = 128
     elif en_bitmap==[1,1,0]: # can do h, so use L
-        dc_val = np.uint8(np.sum(L) >> 2)
+        if predict_width==4:
+            dc_val = np.uint8(np.sum(L) >> 2)
+        else:
+            dc_val = np.uint8(np.sum(L) >> 4)
         print("L:", L)
         print("np.sum(L):", np.sum(L))
     elif en_bitmap==[1,0,1]: # can do v, so use T
-        dc_val = np.uint8(np.sum(T) >> 2)
+        if predict_width==4:
+            dc_val = np.uint8(np.sum(T) >> 2)
+        else:
+            dc_val = np.uint8(np.sum(T) >> 4)   
     else:
-        dc_val = np.uint8((np.sum(L+T)) >> 3)
+        if predict_width==4:
+            dc_val = np.uint8((np.sum(L)+np.sum(T)) >> 3)
+        else:
+            dc_val = np.uint8((np.sum(L+T)) >> 5)
     print("dc val:", dc_val, "en_bitmap:", en_bitmap)
     for i in range(predict_width):
         for j in range(predict_width):
