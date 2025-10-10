@@ -51,30 +51,41 @@ end
 
 initial begin
     mute_all();
-    set_config();
+    start_engine();
     reset_all();
     repeat(5)@(negedge clk);
     send_img();
-    // not handle parameter yet
+    cd();
+    set_QP_and_mode();
+    send_param();
+    rcv_output(0);
     $finish;
 end
 
 
 // input i: to indicate which frame and its ans location
 task automatic rcv_output(input integer i);
-    rcv_output_cnt = 0;
-    while(rcv_output_cnt < 1024) begin // each cycle we receive 1
+    // todo: rcv output and verify
+endtask
+
+task automatic send_param();
+    snd_param_cnt = 0;
+    in_valid_param = 0;
+
+    while(snd_param_cnt < 4)begin
         @(negedge clk);
-        if(out_valid) begin
-            if(out_value !== ans_mem[i*frame_height + (rcv_output_cnt >> 5)][(frame_width - 1) - (rcv_output_cnt & 5'h1F)*8 -: 8]) begin
-                $display("Wrong at frame %0d, pixel (%0d, %0d): out_value: %h, ans: %h", i, rcv_output_cnt >> 5, rcv_output_cnt & 5'h1F, out_value, ans_mem[i*frame_height + (rcv_output_cnt >> 5)][(frame_width - 1) - (rcv_output_cnt & 5'h1F)*8 -: 8]);
-            end
-            else begin
-                $display("Correct at frame %0d, pixel (%0d, %0d): out_value: %h", i, rcv_output_cnt >> 5, rcv_output_cnt & 5'h1F, out_value);
-            end
-            rcv_output_cnt = rcv_output_cnt + 1;
-        end
+        // send mode accordingly
+        in_valid_param = 1;
+        case(snd_param_cnt)
+            0: mode = op_vec[3];
+            1: mode = op_vec[2];
+            2: mode = op_vec[1];
+            3: mode = op_vec[0];
+            default: mode = 0;
+        endcase
+        snd_param_cnt = snd_param_cnt + 1;
     end
+    in_valid_param = 0;
 endtask
 
 task automatic send_img();
@@ -123,13 +134,17 @@ task automatic mute_all();
     QP = 0;
 endtask
 
-task automatic set_config();
+task automatic start_engine();
     clk = 0;
     rst_n = 1;
-    QP = 13;
-    op_vec = 4'b1000;
     $readmemh("/home/popo/Desktop/popo_train_cpu/fixing/iclab_gogo/lab5/output/big_pics/big_data_in_hexa_condensed.txt", data_in_mem);
     $readmemh("/home/popo/Desktop/popo_train_cpu/fixing/iclab_gogo/lab5/output/big_pics/big_ans_hexa_condensed.txt", ans_mem);
+endtask
+
+task automatic set_QP_and_mode();
+    QP = 13;
+    index = 4;
+    op_vec = 4'b1000;
 endtask
 
 h264 u_h264 (
