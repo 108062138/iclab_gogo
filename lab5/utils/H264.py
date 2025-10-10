@@ -71,7 +71,7 @@ def consume_a_frame(frame, op_mode, QP):
                 for j in range(32):
                     print(f"{regs[i,j]:3d}", end=' ')
                 print()
-    return blocks, reconstruct
+    return regs, reconstruct
 
 def reverse_integer_transform(W_bar):
     Y = integer_transform(X=W_bar) # chekcing~~
@@ -199,6 +199,9 @@ def SAD(A, B):
 def get_T_L(blk_idx, step, predict_width, en_bitmap, regs):
     T = [0] * predict_width
     L = [0] * predict_width
+    # make T and L be uint8
+    T = np.array(T, dtype=np.uint8)
+    L = np.array(L, dtype=np.uint8)
     # maintaion index
     at_row, at_col = decode_row_col_by_blk_idx_and_step(blk_idx=blk_idx, step=step)
     # maintain T for v
@@ -229,21 +232,21 @@ def enumerate_all_prediction(L, T, predict_width, en_bitmap):
         dc_val = 128
     elif en_bitmap==[1,1,0]: # can do h, so use L
         if predict_width==4:
-            dc_val = np.uint8(np.sum(L) >> 2)
+            dc_val = np.uint8(np.sum(L).astype(np.int32) >> 2)
         else:
-            dc_val = np.uint8(np.sum(L) >> 4)
+            dc_val = np.uint8(np.sum(L).astype(np.int32) >> 4)
         print("L:", L)
         print("np.sum(L):", np.sum(L))
     elif en_bitmap==[1,0,1]: # can do v, so use T
         if predict_width==4:
-            dc_val = np.uint8(np.sum(T) >> 2)
+            dc_val = np.uint8(np.sum(T).astype(np.int32) >> 2)
         else:
-            dc_val = np.uint8(np.sum(T) >> 4)   
+            dc_val = np.uint8(np.sum(T).astype(np.int32) >> 4)   
     else:
         if predict_width==4:
-            dc_val = np.uint8((np.sum(L)+np.sum(T)) >> 3)
+            dc_val = np.uint8((np.sum(L)+np.sum(T)).astype(np.int32) >> 3)
         else:
-            dc_val = np.uint8((np.sum(L+T)) >> 5)
+            dc_val = np.uint8((np.sum(L+T)).astype(np.int32) >> 5)
     print("dc val:", dc_val, "en_bitmap:", en_bitmap)
     for i in range(predict_width):
         for j in range(predict_width):
