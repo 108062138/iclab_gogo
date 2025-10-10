@@ -65,7 +65,7 @@ end
 
 // input i: to indicate which frame and its ans location
 task automatic rcv_output(input integer i);
-    // todo: rcv output and verify
+    // todo: rcv output and verify [-:32]
 endtask
 
 task automatic send_param();
