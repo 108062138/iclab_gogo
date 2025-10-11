@@ -61,7 +61,7 @@ initial begin
     cd();
     send_param();
     // rcv_output(0);
-    repeat(50)@(negedge clk);
+    repeat(1000)@(negedge clk);
     $finish;
 end
 
@@ -164,8 +164,12 @@ endtask
 
 task automatic set_QP_and_mode();
     QP = 13;
-    index = 11;
-    op_vec = 4'b1000;
+    index = 4;
+    op_vec = 4'b0100;
+    /*
+        01
+        00
+    */
 endtask
 
 h264 u_h264 (
