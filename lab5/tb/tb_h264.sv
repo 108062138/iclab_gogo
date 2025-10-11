@@ -58,7 +58,10 @@ initial begin
     cd();
     set_QP_and_mode();
     send_param();
-    rcv_output(0);
+    cd();
+    send_param();
+    // rcv_output(0);
+    repeat(50)@(negedge clk);
     $finish;
 end
 
@@ -66,13 +69,27 @@ end
 // input i: to indicate which frame and its ans location
 task automatic rcv_output(input integer i);
     // todo: rcv output and verify [-:32]
+    $display("begin output matched at frame %0d!", i);
+    rcv_output_cnt = 0;
+    while(rcv_output_cnt < 1024) begin
+        @(negedge clk);
+        if(out_valid) begin
+            $display("rcv_output_cnt: %d, out_value: %h at (i: %0d, j: %0d)", rcv_output_cnt, out_value, rcv_output_cnt >> 5, rcv_output_cnt & 6'h3F);
+            if(out_value !== ans_mem[i*frame_height + (rcv_output_cnt >> 5)][(frame_width - 1 - ((rcv_output_cnt & 5'h1F)*32)) -: 32]) begin
+                $display("Error at rcv_output_cnt: %d, out_value: %h, ans: %h", rcv_output_cnt, out_value, ans_mem[i*frame_height + (rcv_output_cnt >> 5)][(frame_width - 1 - ((rcv_output_cnt & 5'h1F)*32)) -: 32]);
+                $finish;
+            end
+            rcv_output_cnt = rcv_output_cnt + 1;
+        end
+    end
+    $display("end output matched at frame %0d!", i);
 endtask
 
 task automatic send_param();
+    $display("begin snd param");
     snd_param_cnt = 0;
     in_valid_param = 0;
-
-    while(snd_param_cnt < 4)begin
+    while(snd_param_cnt <= 4)begin
         @(negedge clk);
         // send mode accordingly
         in_valid_param = 1;
@@ -86,24 +103,28 @@ task automatic send_param();
         snd_param_cnt = snd_param_cnt + 1;
     end
     in_valid_param = 0;
+    $display("end snd param");
 endtask
 
 task automatic send_img();
+    $display("begin snd img");
     snd_img_cnt = 0;
     in_valid_data = 0;
     data = 0;
-    while(snd_img_cnt < 16384) begin // each cycle we send 1 byte, from MSB to LSB. data_in_mem is 256bit per line
+    while(snd_img_cnt <= 16384) begin // each cycle we send 1 byte, from MSB to LSB. data_in_mem is 256bit per line
         @(negedge clk);
         in_valid_data = 1;
         data = data_in_mem[snd_img_cnt >> 5][frame_width - 1 - (snd_img_cnt & 5'h1F)*8 -: 8];
-        $display("snd_img_cnt: %d, data: %h at (i: %0d, j: %0d)", snd_img_cnt, data, snd_img_cnt >> 5, snd_img_cnt & 6'h3F);
+        // $display("snd_img_cnt: %d, data: %h at (i: %0d, j: %0d)", snd_img_cnt, data, snd_img_cnt >> 5, snd_img_cnt & 6'h3F);
         snd_img_cnt = snd_img_cnt + 1;
     end
     in_valid_data = 0;
     data = 0;
+    $display("end snd param");
 endtask
 
 task automatic cd();
+    $display("cd...");
     cd_cnt = 0;
     while(cd_cnt < 3) begin
         @(negedge clk);
@@ -143,7 +164,7 @@ endtask
 
 task automatic set_QP_and_mode();
     QP = 13;
-    index = 4;
+    index = 11;
     op_vec = 4'b1000;
 endtask
 
