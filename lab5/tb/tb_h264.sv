@@ -165,7 +165,7 @@ endtask
 task automatic set_QP_and_mode();
     QP = 13;
     index = 4;
-    op_vec = 4'b0100;
+    op_vec = 4'b0010;
     /*
         01
         00

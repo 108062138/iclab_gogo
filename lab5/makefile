@@ -8,10 +8,12 @@ SIM_H264  := $(BUILD)/Vtb_h264
 $(SIM_H264): tb/tb_h264.sv $(H264_SRCS) $(BRAM_SRCS) | $(BUILD)
 	@echo "[VERILATOR] Compile -> $@"
 	verilator --sv --trace-vcd --binary -j 32 \
-	  --top-module tb_h264 \
-	  -Mdir $(BUILD) \
-	  tb/tb_h264.sv $(H264_SRCS) $(BRAM_SRCS)\
-	  -Wno-WIDTHEXPAND -Wno-WIDTHTRUNC
+	--top-module tb_h264 \
+	-Mdir $(BUILD) \
+	-Isrcs \
+	tb/tb_h264.sv $(H264_SRCS) $(BRAM_SRCS) \
+	-Wno-WIDTHEXPAND -Wno-WIDTHTRUNC
+	
 
 $(BUILD):
 	@mkdir -p $(BUILD)
