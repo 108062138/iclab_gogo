@@ -38,7 +38,7 @@ always	#(CYCLE/2.0) clk = ~clk; //clock
 
 parameter SIZE_OF_FRAME = 16;
 parameter BITS_OF_PIXEL = 8;
-parameter NUM_OF_FRAME = 5;
+parameter NUM_OF_FRAME = 128;
 parameter SIMPLE_PATNUM = 4;
 
 parameter CMD_BITS = 18;
@@ -151,8 +151,8 @@ task generate_job; begin
 end endtask
 
 task set_cmd; begin
-    // current_opcode = $urandom() % 2;
-    // current_funct = $urandom() % 2;
+    // current_opcode = $urandom() % 4;
+    // current_funct = $urandom() % 4;
     {current_opcode, current_funct} = EIGHT_BY_EIGHT_MORTON;
     current_src = $urandom() % NUM_OF_FRAME;
     current_dst = $urandom() % NUM_OF_FRAME;
