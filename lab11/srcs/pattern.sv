@@ -36,7 +36,7 @@ always	#(CYCLE/2.0) clk = ~clk; //clock
 // integer & parameter
 // ========================================
 
-parameter SIZE_OF_FRAME = 8;
+parameter SIZE_OF_FRAME = 16;
 parameter BITS_OF_PIXEL = 8;
 parameter NUM_OF_FRAME = 5;
 parameter SIMPLE_PATNUM = 4;
@@ -98,32 +98,28 @@ Example code:
 
 always_comb begin
     // 4x4 Zig-Zag (16 entries)
-    zz4_delta_x = {0, 0, 1, 2, 1, 0, 0, 1, 2, 3, 3, 2, 1, 2, 3, 3};
-    zz4_delta_y = {0, 1, 0, 0, 1, 2, 3, 2, 1, 0, 1, 2, 3, 3, 2, 3};
-
+    zz4_delta_x = {0, 1, 0, 0, 1, 2, 3, 2, 1, 0, 1, 2, 3, 3, 2, 3};
+    zz4_delta_y = {0, 0, 1, 2, 1, 0, 0, 1, 2, 3, 3, 2, 1, 2, 3, 3};
     // 8x8 Zig-Zag (64 entries)
-    // ROWS (Vertical Index)
     zz8_delta_x = {
-        0, 0, 1, 2, 1, 0, 0, 1, 
-        2, 3, 4, 3, 2, 1, 0, 0, 
-        1, 2, 3, 4, 5, 6, 5, 4, 
-        3, 2, 1, 0, 0, 1, 2, 3, 
-        4, 5, 6, 7, 7, 6, 5, 4, 
-        3, 2, 3, 4, 5, 6, 7, 7, 
-        6, 5, 4, 5, 6, 7, 7, 6, 
-        5, 6, 7, 7, 6, 7, 7, 7
+        0, 1, 0, 0, 1, 2, 3, 2,
+        1, 0, 0, 1, 2, 3, 4, 5,
+        4, 3, 2, 1, 0, 0, 1, 2,
+        3, 4, 5, 6, 7, 6, 5, 4,
+        3, 2, 1, 0, 1, 2, 3, 4,
+        5, 6, 7, 7, 6, 5, 4, 3,
+        2, 3, 4, 5, 6, 7, 7, 6,
+        5, 4, 5, 6, 7, 7, 6, 7
     };
-
-    // COLS (Horizontal Index)
     zz8_delta_y = {
-        0, 1, 0, 0, 1, 2, 3, 2, 
-        1, 0, 0, 1, 2, 3, 4, 5, 
-        4, 3, 2, 1, 0, 0, 1, 2, 
-        3, 4, 5, 6, 7, 6, 5, 4, 
-        3, 2, 1, 0, 1, 2, 3, 4, 
-        5, 6, 7, 7, 6, 5, 4, 3, 
-        2, 1, 0, 0, 1, 2, 3, 4, 
-        5, 6, 7, 5, 6, 7, 6, 7
+        0, 0, 1, 2, 1, 0, 0, 1,
+        2, 3, 4, 3, 2, 1, 0, 0,
+        1, 2, 3, 4, 5, 6, 5, 4,
+        3, 2, 1, 0, 0, 1, 2, 3,
+        4, 5, 6, 7, 7, 6, 5, 4,
+        3, 2, 1, 2, 3, 4, 5, 6,
+        7, 7, 6, 5, 4, 3, 4, 5,
+        6, 7, 7, 6, 5, 6, 7, 7
     };
 end
 
@@ -142,7 +138,7 @@ initial begin
     generate_frames_task();
     input_frames_task();
     generate_job();
-    generate_job();
+    // generate_job();
     pass_task();
 end
 
@@ -157,7 +153,7 @@ end endtask
 task set_cmd; begin
     // current_opcode = $urandom() % 2;
     // current_funct = $urandom() % 2;
-    {current_opcode, current_funct} = ROTATE_180;
+    {current_opcode, current_funct} = EIGHT_BY_EIGHT_MORTON;
     current_src = $urandom() % NUM_OF_FRAME;
     current_dst = $urandom() % NUM_OF_FRAME;
     cmd = {current_opcode, current_funct, current_src, current_dst};
@@ -271,10 +267,10 @@ task set_golden; begin
             for(integer blk_col=0;blk_col< SIZE_OF_FRAME/4;blk_col=blk_col+1) begin
                 for(integer idx=0;idx<16;idx=idx+1) begin
                     integer src_row, src_col, dst_row, dst_col;
-                    src_row = blk_row*4 + zz4_delta_y[idx];
-                    src_col = blk_col*4 + zz4_delta_x[idx];
-                    dst_row = idx / 4;
-                    dst_col = idx % 4;
+                    src_row = blk_row * 4 + zz4_delta_y[idx];
+                    src_col = blk_col * 4 + zz4_delta_x[idx];
+                    dst_row = blk_row * 4 + idx / 4;
+                    dst_col = blk_col * 4 + idx % 4;
                     golden_ans[dst_row][dst_col] = tensor[current_src][src_row][src_col];
                 end
             end
@@ -286,8 +282,8 @@ task set_golden; begin
                     integer src_row, src_col, dst_row, dst_col;
                     src_row = blk_row*8 + zz8_delta_y[idx];
                     src_col = blk_col*8 + zz8_delta_x[idx];
-                    dst_row = idx / 8;
-                    dst_col = idx % 8;
+                    dst_row = blk_row*8 + idx / 8;
+                    dst_col = blk_col*8 + idx % 8;
                     golden_ans[dst_row][dst_col] = tensor[current_src][src_row][src_col];
                 end
             end
@@ -355,10 +351,10 @@ task verify_task; begin
     $display("src_frame  => Golden Answer:");
     for(integer row=0 ; row<SIZE_OF_FRAME ; row=row+1) begin
         for(integer col=0 ; col<SIZE_OF_FRAME ; col=col+1)
-            $write("%0d ", tensor[current_src][row][col]);
+            $write("%3d ", tensor[current_src][row][col]);
         $write(" => ");
         for(integer col=0 ; col<SIZE_OF_FRAME ; col=col+1)
-            $write("%0d ", golden_ans[row][col]);
+            $write("%3d ", golden_ans[row][col]);
         $write("\n");
     end
 end endtask
@@ -379,7 +375,7 @@ begin
         $display("Generating frame %0d", index);
         for(row=0 ; row<SIZE_OF_FRAME ; row=row+1) begin
             for(col=0 ; col<SIZE_OF_FRAME ; col=col+1) begin
-                _input_frame[index][row][col] = $urandom() % (2**(BITS_OF_PIXEL-5));
+                _input_frame[index][row][col] = row*SIZE_OF_FRAME+col;//$urandom() % (2**(BITS_OF_PIXEL-5));
                 tensor[index][row][col] = _input_frame[index][row][col];
             end
         end
